@@ -35,7 +35,7 @@ def _e(value):
 st.set_page_config(page_title="DISSILEX", page_icon="\N{OPEN BOOK}", layout="wide")
 
 # ---------------------------------------------------------------------------
-# CSS injection (prototype-specification.md §8)
+# CSS injection
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -205,8 +205,7 @@ st.markdown(
     # href="?" returns to the app root on ANY base path: it resolves to the
     # current path with an empty query string, dropping all query params.
     # Works under local dev ("/") and a proxied sub-path ("/apps/dissilex/")
-    # with no hostname detection or hardcoded paths. See reference note
-    # db-size-and-deploy-notes.md / public-release-handoff §base-path.
+    # with no hostname detection or hardcoded paths.
     '<h1><a href="?" target="_self" style="color:inherit;text-decoration:none">DISSILEX</a></h1>',
     unsafe_allow_html=True,
 )
@@ -519,7 +518,7 @@ def render_results_list(results, term, stype):
 
 
 # ---------------------------------------------------------------------------
-# Entry detail card (§5–6 of prototype-specification.md)
+# Entry detail card
 # ---------------------------------------------------------------------------
 
 
