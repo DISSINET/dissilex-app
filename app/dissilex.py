@@ -7,7 +7,7 @@ Usage:
     streamlit run app/dissilex.py
 """
 
-import ast
+import html
 import os
 import re
 import sqlite3
@@ -22,6 +22,11 @@ from lib.constants import Constants
 from lib.scope import symmetric_dedup_sql
 
 from footer import render_footer
+
+
+def _e(value):
+    """HTML-escape a value for safe interpolation into unsafe_allow_html markup."""
+    return html.escape(str(value)) if value else ""
 
 # ---------------------------------------------------------------------------
 # Page config (must be first Streamlit call)
@@ -419,7 +424,7 @@ def render_results_list(results, term, stype):
     )
     st.markdown(
         f"**{len(results)} result{'s' if len(results) != 1 else ''}** "
-        f"for *{term}* \u00b7 <span style='color:#888;font-size:10pt'>{type_label} search</span>",
+        f"for *{_e(term)}* \u00b7 <span style='color:#888;font-size:10pt'>{type_label} search</span>",
         unsafe_allow_html=True,
     )
     st.markdown("---")
@@ -443,7 +448,7 @@ def render_results_list(results, term, stype):
             st.markdown(
                 f'<div style="margin:12px 0 4px 0;font-size:12pt;font-weight:bold;'
                 f"color:{color};border-bottom:1px solid var(--dl-border);"
-                f'padding-bottom:2px">Actions: <em>{group_label}</em>{suffix}'
+                f'padding-bottom:2px">Actions: <em>{_e(group_label)}</em>{suffix}'
                 f' <span style="color:#888;font-size:10pt;font-weight:normal">'
                 f"({len(rows)})</span></div>",
                 unsafe_allow_html=True,
@@ -487,7 +492,7 @@ def render_results_list(results, term, stype):
                 if len(excerpt) > 120:
                     excerpt = excerpt[:120] + "\u2026"
                 pos_html = (
-                    f' <span class="dl-pos">\u00b7 {row["pos"]}</span>'
+                    f' <span class="dl-pos">\u00b7 {_e(row["pos"])}</span>'
                     if row["pos"]
                     else ""
                 )
@@ -498,7 +503,7 @@ def render_results_list(results, term, stype):
                     st.markdown(
                         f'<a href="{href}" target="_self" '
                         f'style="font-size:14pt;font-weight:bold;color:#C0392B;'
-                        f'text-decoration:none">{row["label"]}</a>',
+                        f'text-decoration:none">{_e(row["label"])}</a>',
                         unsafe_allow_html=True,
                     )
                 with c_btn:
@@ -508,7 +513,7 @@ def render_results_list(results, term, stype):
                 with c_info:
                     st.markdown(
                         f'<span class="dl-badge">{kind_label}</span>{pos_html}'
-                        f' <span class="dl-source">{excerpt}</span>',
+                        f' <span class="dl-source">{_e(excerpt)}</span>',
                         unsafe_allow_html=True,
                     )
 
@@ -553,7 +558,7 @@ def _render_action_card(row):
     detail = row["detail"] or ""
 
     form_html = ""
-    pos_html = f' <span class="dl-pos">{pos}</span>' if pos else ""
+    pos_html = f' <span class="dl-pos">{_e(pos)}</span>' if pos else ""
 
     ext_ids = query(
         "SELECT resource, value, gloss FROM external_ids WHERE entity_uuid = ?", (uuid,)
@@ -567,43 +572,44 @@ def _render_action_card(row):
                     ' <span class="dl-badge">No equivalent in Lemma Bank</span>'
                 )
             else:
+                lila_url = urllib.parse.quote(val, safe="")
                 badge_html += (
-                    f' <a href="https://lila-erc.eu/data/id/lemma/{val}" '
+                    f' <a href="https://lila-erc.eu/data/id/lemma/{lila_url}" '
                     f'target="_blank" class="dl-badge" '
-                    f'style="text-decoration:none">\u2197 LiLa {val}</a>'
+                    f'style="text-decoration:none">\u2197 LiLa {_e(val)}</a>'
                 )
         elif res == "wordnet31":
             if val == "NA":
                 badge_html += ' <span class="dl-badge">No WN 3.1 equivalent</span>'
             else:
-                title = f' title="{gloss}"' if gloss else ""
-                badge_html += f' <span class="dl-badge"{title}>WN3.1 {val}</span>'
+                title = f' title="{_e(gloss)}"' if gloss else ""
+                badge_html += f' <span class="dl-badge"{title}>WN3.1 {_e(val)}</span>'
         elif res == "wordnet30":
             if val == "NA":
                 badge_html += ' <span class="dl-badge">No WN 3.0 equivalent</span>'
             else:
-                title = f' title="{gloss}"' if gloss else ""
-                badge_html += f' <span class="dl-badge"{title}>WN3.0 {val}</span>'
+                title = f' title="{_e(gloss)}"' if gloss else ""
+                badge_html += f' <span class="dl-badge"{title}>WN3.0 {_e(val)}</span>'
 
-    uuid_badge = f' <span class="dl-badge">{uuid}</span>'
+    uuid_badge = f' <span class="dl-badge">{_e(uuid)}</span>'
     header = (
-        f'<span class="dl-headword">{headword}</span>'
+        f'<span class="dl-headword">{_e(headword)}</span>'
         f"{form_html}{pos_html}{uuid_badge}{badge_html}"
     )
 
     variants_html = ""
     variants = row["label_variants"] or ""
     if variants:
-        variants_html = f'<div class="dl-variants">{variants}</div>'
+        variants_html = f'<div class="dl-variants">{_e(variants)}</div>'
 
     def_html = ""
     if detail:
-        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {detail}</div>'
+        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {_e(detail)}</div>'
 
     voice_html = ""
     sv = row["semantic_voice"] or ""
     if sv:
-        voice_html = f'<div class="dl-voice">{_VOICE_LABELS.get(sv, sv)}</div>'
+        voice_html = f'<div class="dl-voice">{_e(_VOICE_LABELS.get(sv, sv))}</div>'
 
     valency_rows = query(
         "SELECT slot, entity_type, morphosyntactic, morphosyntactic_display, semantic "
@@ -621,16 +627,20 @@ def _render_action_card(row):
             morph = v["morphosyntactic_display"] or v["morphosyntactic"]
             if not entity_names and not morph and not v["semantic"]:
                 continue
-            lines = [f'<div class="dl-val-slot">{slot} \u2014 {slot_label}</div>']
+            lines = [
+                f'<div class="dl-val-slot">{_e(slot)} \u2014 {_e(slot_label)}</div>'
+            ]
             if entity_names:
                 lines.append(
-                    f'<div class="dl-val-line">Entity types: {entity_names}</div>'
+                    f'<div class="dl-val-line">Entity types: {_e(entity_names)}</div>'
                 )
             if morph:
-                lines.append(f'<div class="dl-val-line">Morphosyntactic: {morph}</div>')
+                lines.append(
+                    f'<div class="dl-val-line">Morphosyntactic: {_e(morph)}</div>'
+                )
             if v["semantic"]:
                 lines.append(
-                    f'<div class="dl-val-line">Semantic: {v["semantic"]}</div>'
+                    f'<div class="dl-val-line">Semantic: {_e(v["semantic"])}</div>'
                 )
             blocks.append("".join(lines))
         if blocks:
@@ -650,8 +660,8 @@ def _render_concept_card(row):
     label = row["label"]
     lang = row["language"]
     detail = row["detail"] or ""
-    lang_badge = f' <span class="dl-badge">{lang}</span>'
-    uuid_badge = f' <span class="dl-badge">{uuid}</span>'
+    lang_badge = f' <span class="dl-badge">{_e(lang)}</span>'
+    uuid_badge = f' <span class="dl-badge">{_e(uuid)}</span>'
 
     ext_ids = query(
         "SELECT resource, value, gloss FROM external_ids WHERE entity_uuid = ?", (uuid,)
@@ -660,24 +670,26 @@ def _render_concept_card(row):
     def _ext_badge(e):
         res, val, gloss = e["resource"], e["value"], e["gloss"]
         title = (
-            f' title="{gloss}"' if (gloss and res in ("wordnet30", "wordnet31")) else ""
+            f' title="{_e(gloss)}"'
+            if (gloss and res in ("wordnet30", "wordnet31"))
+            else ""
         )
-        return f' <span class="dl-badge"{title}>{res} {val}</span>'
+        return f' <span class="dl-badge"{title}>{_e(res)} {_e(val)}</span>'
 
     badge_html = "".join(_ext_badge(e) for e in ext_ids)
 
     header = (
-        f'<span class="dl-headword">{label}</span>{lang_badge}{uuid_badge}{badge_html}'
+        f'<span class="dl-headword">{_e(label)}</span>{lang_badge}{uuid_badge}{badge_html}'
     )
 
     variants_html = ""
     variants = row["label_variants"] or ""
     if variants:
-        variants_html = f'<div class="dl-variants">{variants}</div>'
+        variants_html = f'<div class="dl-variants">{_e(variants)}</div>'
 
     def_html = ""
     if detail:
-        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {detail}</div>'
+        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {_e(detail)}</div>'
 
     st.markdown(
         f'<div class="dissilex-entry">{header}{variants_html}{def_html}</div>',
@@ -724,7 +736,7 @@ def _render_relations(uuid):
             cols = st.columns([3, 9])
             with cols[0]:
                 st.markdown(
-                    f'<span class="dl-rel-type">{rtype}</span>', unsafe_allow_html=True
+                    f'<span class="dl-rel-type">{_e(rtype)}</span>', unsafe_allow_html=True
                 )
             with cols[1]:
                 for r in rels:
@@ -741,7 +753,7 @@ def _render_relations(uuid):
                 cols = st.columns([3, 9])
                 with cols[0]:
                     st.markdown(
-                        f'<span class="dl-rel-type">{rtype}</span>',
+                        f'<span class="dl-rel-type">{_e(rtype)}</span>',
                         unsafe_allow_html=True,
                     )
                 with cols[1]:
@@ -757,8 +769,8 @@ def _render_notes(row):
     lang_label = LANGUAGE_NAMES.get(row["language"], row["language"])
     with st.expander("Notes & sources"):
         st.markdown(
-            f'<span class="dl-source">Language: {lang_label}</span><br>'
-            f'<span class="dl-source">Status: {status_label}</span>',
+            f'<span class="dl-source">Language: {_e(lang_label)}</span><br>'
+            f'<span class="dl-source">Status: {_e(status_label)}</span>',
             unsafe_allow_html=True,
         )
 
