@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
 from lib.constants import Constants
+from lib.scope import symmetric_dedup_sql
 
 from footer import render_footer
 
@@ -29,7 +30,7 @@ from footer import render_footer
 st.set_page_config(page_title="DISSILEX", page_icon="\N{OPEN BOOK}", layout="wide")
 
 # ---------------------------------------------------------------------------
-# CSS injection
+# CSS injection (prototype-specification.md §8)
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -142,7 +143,9 @@ def _all_uuids():
 STATUS_NAMES = {
     "0": "Pending",
     "1": "Approved",
+    "2": "Discouraged",
     "3": "Approved",
+    "4": "Unfinished",
 }
 
 ENTITY_CLASS_NAMES = Constants.ENTITY_CLASS_NAMES
@@ -194,7 +197,12 @@ nav_stype = _qp_get("t") if _qp_get("t") in _SEARCH_TYPES else "Auto"
 # ---------------------------------------------------------------------------
 
 st.markdown(
-    '<h1><a href="/" target="_self" style="color:inherit;text-decoration:none">DISSILEX</a></h1>',
+    # href="?" returns to the app root on ANY base path: it resolves to the
+    # current path with an empty query string, dropping all query params.
+    # Works under local dev ("/") and a proxied sub-path ("/apps/dissilex/")
+    # with no hostname detection or hardcoded paths. See reference note
+    # db-size-and-deploy-notes.md / public-release-handoff §base-path.
+    '<h1><a href="?" target="_self" style="color:inherit;text-decoration:none">DISSILEX</a></h1>',
     unsafe_allow_html=True,
 )
 st.caption(
@@ -506,7 +514,7 @@ def render_results_list(results, term, stype):
 
 
 # ---------------------------------------------------------------------------
-# Entry detail card
+# Entry detail card (§5–6 of prototype-specification.md)
 # ---------------------------------------------------------------------------
 
 
@@ -790,15 +798,7 @@ elif not nav_term:
         "(SELECT COUNT(*) FROM actions) AS n_actions, "
         "(SELECT COUNT(*) FROM concepts) AS n_concepts, "
         "(SELECT COUNT(*) FROM relations r1"
-        " WHERE r1.relation_type NOT IN"
-        "   ('HAS_SYNONYM','HAS_SUBJ_A1_RECIPROCAL','HAS_ANTONYM','HAS_PROPERTY_RECIPROCAL')"
-        " OR r1.source_uuid < r1.target_uuid"
-        " OR NOT EXISTS ("
-        "   SELECT 1 FROM relations r2"
-        "   WHERE r2.relation_type = r1.relation_type"
-        "     AND r2.source_uuid = r1.target_uuid"
-        "     AND r2.target_uuid = r1.source_uuid"
-        " )) AS n_relations"
+        f" WHERE {symmetric_dedup_sql()}) AS n_relations"
     )[0]
     st.markdown(
         f"The database contains **{stats['n_actions']} actions**, "
@@ -832,7 +832,19 @@ elif not nav_term:
         (
             "00014398-v",
             "WordNet ID",
-            "requievit (WN 3.1 00014398-v) — gloss via CILI mapping to WN 3.0",
+            "requievit (WN3.1 00014398-v) — gloss via CILI mapping to WN3.0",
+        ),
+        ("ieiunavit", "Lemma", "ieiunavit — action with no LiLa Lemma Bank equivalent"),
+        ("abiit", "Lemma", "abiit — action with no WordNet equivalent"),
+        (
+            "0544f316-2cd4-4fbe-80f7-21a9557c8da2",
+            "UUID",
+            "cremavit — action with formerly unidirectional synonym (combussit)",
+        ),
+        (
+            "00fa05e1-16fb-42ca-8c2a-3bb144908b87",
+            "UUID",
+            "prebuit — action with alternative label (praebuit)",
         ),
     ]
     for term, stype, label in examples:

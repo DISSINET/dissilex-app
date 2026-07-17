@@ -4,9 +4,9 @@
 for medieval Latin, maintained by the [Dissident Networks Project
 (DISSINET)](https://dissinet.cz) at Masaryk University.
 
-This repository contains the source code for the public DISSILEX web
-application. The accompanying dataset (`data/dissilex.db`) is a SQLite database
-released separately on Zenodo under CC BY-SA 4.0.
+The accompanying dataset (data/dissilex.db) is a SQLite database licensed under 
+CC BY-SA 4.0. It will additionally be published as a citable release on Zenodo 
+in the near future.
 
 ---
 
@@ -78,7 +78,7 @@ pip install streamlit
 streamlit run app/dissilex.py
 ```
 
-Requires `data/dissilex.db` (download from Zenodo — see dataset link below).
+Requires `data/dissilex.db`, which is included in the repository.
 
 ---
 

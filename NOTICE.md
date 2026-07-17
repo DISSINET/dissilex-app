@@ -63,7 +63,7 @@ reproduced verbatim below as the licence requires on all copies:
 > documentation shall at all times remain with Princeton University and LICENSEE
 > agrees to preserve same.
 
-WordNet 3.0 was accessed via NLTK; WordNet 3.1 via the LiLa SPARQL endpoint.
+WordNet synset identifiers (3.0 and 3.1) originate from the DISSINET database; the missing version of a 3.0/3.1 pair is derived via CILI. All gloss text is WordNet 3.0, obtained via NLTK — an entry shown with a 3.1 identifier displays the corresponding 3.0 gloss, mapped via CILI.
 
 Citations:
 
