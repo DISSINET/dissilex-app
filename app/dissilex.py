@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
+import streamlit.components.v1 as components
 from lib.constants import Constants
 from lib.scope import symmetric_dedup_sql
 
@@ -32,7 +33,12 @@ def _e(value):
 # Page config (must be first Streamlit call)
 # ---------------------------------------------------------------------------
 
-st.set_page_config(page_title="DISSILEX", page_icon="\N{OPEN BOOK}", layout="wide")
+st.set_page_config(
+    page_title="DISSILEX",
+    page_icon="\N{OPEN BOOK}",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 # ---------------------------------------------------------------------------
 # CSS injection
@@ -48,22 +54,25 @@ st.markdown(
     --dl-badge-bg: #F2F3F4;
     --dl-badge-fg: #888;
     --dl-border: #D5D8DC;
+    --dl-link: #1A5276;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --dl-valency: #5DADE2;
-      --dl-def-color: #D5D8DC;
+      --dl-def-color: #6C7A89;
       --dl-badge-bg: #2C3E50;
       --dl-badge-fg: #AEB6BF;
       --dl-border: #4A5568;
+      --dl-link: #5DADE2;
     }
   }
   [data-theme="dark"] {
     --dl-valency: #5DADE2;
-    --dl-def-color: #D5D8DC;
+    --dl-def-color: #6C7A89;
     --dl-badge-bg: #2C3E50;
     --dl-badge-fg: #AEB6BF;
     --dl-border: #4A5568;
+    --dl-link: #5DADE2;
   }
 
   .dissilex-entry { padding: 12px; margin-bottom: 12px;
@@ -71,13 +80,14 @@ st.markdown(
   .dl-headword  { font-size: 20pt; font-weight: bold; color: #C0392B; margin-right: 10px; }
   .dl-form      { font-size: 13pt; color: #C0392B; opacity: 0.7; }
   .dl-pos       { font-size: 13pt; color: #888; margin-left: 8px; }
-  .dl-sense-num { font-size: 9pt;  color: #2980B9; margin-right: 6px; vertical-align: middle; }
   .dl-def       { font-style: italic; color: var(--dl-def-color); margin-left: 20px; }
   .dl-rel-type  { color: #6C3483; font-size: 11pt; font-variant: small-caps; margin-right: 6px; }
   .dl-badge     { background: var(--dl-badge-bg); color: var(--dl-badge-fg); font-size: 10pt;
                   padding: 1px 6px; border-radius: 3px; margin-left: 4px; }
+  .dissilex-entry a.dl-badge { color: var(--dl-link); font-weight: 600; }
   .dl-note      { color: #9B59B6; font-size: 11pt; }
   .dl-source    { color: #888; font-size: 11pt; }
+  .dl-status    { color: #888; font-size: 10pt; margin-top: 8px; }
   .dl-val-slot  { color: var(--dl-valency); font-weight: bold; font-size: 13pt;
                   margin-bottom: 2px; }
   .dl-val-line  { color: var(--dl-valency); font-style: italic; font-size: 12pt;
@@ -156,6 +166,15 @@ STATUS_NAMES = {
 ENTITY_CLASS_NAMES = Constants.ENTITY_CLASS_NAMES
 SLOT_NAMES = Constants.SLOT_NAMES
 LANGUAGE_NAMES = Constants.LANGUAGE_NAMES
+RELATION_NAMES = Constants.RELATION_NAMES
+# Canonical display order for the relations list (T66): the key order of
+# RELATION_NAMES. Unknown types sort last.
+_REL_ORDER = {rtype: i for i, rtype in enumerate(RELATION_NAMES)}
+
+
+def _rel_rank(rtype):
+    """Sort key for a relation type in the canonical display order."""
+    return _REL_ORDER.get(rtype, len(_REL_ORDER))
 
 
 def _expand_entity_types(raw):
@@ -185,6 +204,12 @@ def detect_search_type(term):
     if _UUID_RE.match(t):
         return "UUID"
     if _WN_NUMERIC.match(t):
+        return "WordNet ID"
+    # 'NA' (exact, uppercase) is the WordNet "no equivalent" sentinel stored as
+    # an external ID — resolve it as a WordNet ID under Auto. Case-sensitive on
+    # purpose: lowercase 'na' is a legitimate lemma substring query (matches
+    # narravit, natus, crucesignatus, …) and must stay a Lemma search.
+    if t == "NA":
         return "WordNet ID"
     return "Lemma"
 
@@ -229,10 +254,18 @@ with col_input:
     )
 
 with col_type:
+    # Keep the dropdown in sync with the URL's `t` param, but only re-sync when
+    # the URL actually changes (navigation / new search) — otherwise a manual
+    # pick would be clobbered on the next rerun. A keyless selectbox treats
+    # `index` as a one-time default and drifts out of sync (would intermittently
+    # show a resolved type like "Lemma" instead of "Auto").
+    if st.session_state.get("_last_t_url") != nav_stype:
+        st.session_state["search_type"] = nav_stype
+        st.session_state["_last_t_url"] = nav_stype
     search_type = st.selectbox(
         "Type",
         _SEARCH_TYPES,
-        index=_SEARCH_TYPES.index(nav_stype),
+        key="search_type",
         label_visibility="collapsed",
     )
 
@@ -259,6 +292,17 @@ if search_term.strip() != nav_term and not search_clicked:
 # Search execution
 # ---------------------------------------------------------------------------
 
+# Active voice first, then passive, reflexive, everything else (T64). Mirrors
+# _VOICE_ORDER; the display already re-buckets by voice, so this keeps the flat
+# result list correct on its own.
+_VOICE_SORT_SQL = (
+    "CASE semantic_voice "
+    "WHEN 'active semantic voice' THEN 0 "
+    "WHEN 'passive semantic voice' THEN 1 "
+    "WHEN 'reflexive semantic voice' THEN 2 "
+    "ELSE 3 END"
+)
+
 
 def run_search(term, stype):
     """Return (results, effective_stype). Resolves 'Auto' to the detected type."""
@@ -274,11 +318,11 @@ def run_search(term, stype):
             "   OR lila_canonical LIKE '%' || ? || '%' COLLATE NOCASE "
             "   OR lila_variants LIKE '%' || ? || '%' COLLATE NOCASE "
             "   OR (lila_canonical IS NULL AND spacy_lemma LIKE ? COLLATE NOCASE) "
-            "ORDER BY label COLLATE NOCASE",
+            f"ORDER BY {_VOICE_SORT_SQL}, label COLLATE NOCASE",
             (f"{term}%", term, term, f"{term}%"),
         )
         concepts = query(
-            "SELECT uuid, 'concept' AS kind, label, '' AS pos, detail, "
+            "SELECT uuid, 'concept' AS kind, label, pos, detail, "
             "lila_canonical, lila_variants, NULL AS spacy_lemma "
             "FROM concepts "
             "WHERE label LIKE ? COLLATE NOCASE "
@@ -299,7 +343,7 @@ def run_search(term, stype):
         )
         if not rows:
             rows = query(
-                "SELECT uuid, 'concept' AS kind, label, '' AS pos, detail, "
+                "SELECT uuid, 'concept' AS kind, label, pos, detail, "
                 "lila_canonical, lila_variants, NULL AS spacy_lemma "
                 "FROM concepts WHERE uuid = ?",
                 (term,),
@@ -321,11 +365,11 @@ def run_search(term, stype):
             "WHERE e.resource IN ('wordnet30', 'wordnet31') "
             "AND (e.value = ? COLLATE NOCASE "
             "     OR e.value LIKE ? ESCAPE '\\' COLLATE NOCASE) "
-            "ORDER BY label COLLATE NOCASE",
+            f"ORDER BY {_VOICE_SORT_SQL}, label COLLATE NOCASE",
             (term, f"{escaped}%"),
         )
         concepts = query(
-            "SELECT DISTINCT c.uuid, 'concept' AS kind, c.label, '' AS pos, c.detail, "
+            "SELECT DISTINCT c.uuid, 'concept' AS kind, c.label, c.pos, c.detail, "
             "c.lila_canonical, c.lila_variants, NULL AS spacy_lemma "
             "FROM external_ids e JOIN concepts c ON e.entity_uuid = c.uuid "
             "WHERE e.resource IN ('wordnet30', 'wordnet31') "
@@ -351,9 +395,9 @@ _VOICE_ORDER = [
     None,
 ]
 _VOICE_LABELS = {
-    "active semantic voice": "Active",
-    "passive semantic voice": "Passive",
-    "reflexive semantic voice": "Reflexive",
+    "active semantic voice": "Active meaning",
+    "passive semantic voice": "Passive meaning",
+    "reflexive semantic voice": "Reflexive meaning",
     "deponent": "Deponent",
     None: "Unclassified",
 }
@@ -549,51 +593,140 @@ def _render_back_button():
         _go_home()
 
 
+_COPY_BAD_VALUES = {"", "na", "nan", "none"}
+
+
+def _copy_items(uuid, ext_ids):
+    """Build the (display_label, copy_value, tooltip) list for an entity's copy row.
+
+    Order: LiLa, WordNet 3.0, WordNet 3.1, UUID — whichever exist. Labels carry
+    no ID (the IDs are already shown in the main card); WordNet buttons carry
+    the synset gloss as hover text. 'NA'/empty sentinels are skipped.
+    """
+    by_res = {}
+    for e in ext_ids:
+        val = (e["value"] or "")
+        if val.strip().lower() in _COPY_BAD_VALUES:
+            continue
+        by_res[e["resource"]] = (val, e["gloss"] or "")
+
+    items = []
+    # LiLa, then WordNet 3.0/3.1, each with no ID in the label
+    if "lila" in by_res:
+        items.append(("LiLa", by_res["lila"][0], ""))
+    for res, label in (("wordnet30", "WordNet 3.0"), ("wordnet31", "WordNet 3.1")):
+        if res in by_res:
+            val, gloss = by_res[res]
+            items.append((label, val, gloss))
+    items.append(("UUID", uuid, ""))   # UUID last — least relevant to the public
+    return items
+
+
+def _copy_buttons_html(items):
+    """Return a self-contained HTML fragment: one copy-to-clipboard button per
+    (label, value). No external requests (CSP-safe); values live in a
+    data-attribute (HTML-escaped) and are read by JS, so there is no
+    JS-string injection surface. Theme follows the viewer via prefers-color-scheme.
+    Returns '' when there is nothing to copy.
+    """
+    if not items:
+        return ""
+    parts = []
+    for label, val, tip in items:
+        title = f' title="{_e(tip)}"' if tip else ""
+        parts.append(
+            f'<button class="cp" type="button" data-copy="{_e(val)}" '
+            f'onclick="cp(this)" aria-label="Copy {_e(label)}"{title}>'
+            f'⧉ {_e(label)}</button>'
+        )
+    buttons = "".join(parts)
+    return (
+        "<style>"
+        "*{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}"
+        ".row{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0}"
+        ".cp{font-size:10pt;padding:2px 8px;border-radius:3px;cursor:pointer;"
+        "border:1px solid #ccc;background:#f0f0f0;color:#333;white-space:nowrap}"
+        ".cp:hover{background:#e2e2e2}"
+        ".cp.done{background:#2e7d32;color:#fff;border-color:#2e7d32}"
+        "@media (prefers-color-scheme:dark){"
+        ".cp{background:#2b2b2b;color:#ddd;border-color:#555}"
+        ".cp:hover{background:#3a3a3a}"
+        ".cp.done{background:#2e7d32;color:#fff;border-color:#2e7d32}}"
+        "</style>"
+        f'<div class="row">{buttons}</div>'
+        "<script>"
+        "function cp(b){var t=b.getAttribute('data-copy');"
+        "function ok(){var o=b.textContent;b.textContent='\\u2713 Copied!';"
+        "b.classList.add('done');setTimeout(function(){b.textContent=o;"
+        "b.classList.remove('done')},1200)}"
+        "if(navigator.clipboard&&navigator.clipboard.writeText){"
+        "navigator.clipboard.writeText(t).then(ok).catch(function(){})}"
+        "else{var a=document.createElement('textarea');a.value=t;"
+        "document.body.appendChild(a);a.select();"
+        "try{document.execCommand('copy');ok()}catch(e){}"
+        "document.body.removeChild(a)}}"
+        "</script>"
+    )
+
+
+def _render_copy_row(uuid, ext_ids):
+    """Render the copy-to-clipboard button row for an entity, if any (T65)."""
+    items = _copy_items(uuid, ext_ids)
+    if items:
+        components.html(_copy_buttons_html(items), height=40, scrolling=False)
+
+
 def _render_action_card(row):
     """Render the full detail card for an Action entity."""
     uuid = row["uuid"]
     headword = row["label"]
     pos = row["pos"] or ""
+    lang = row["language"]
     detail = row["detail"] or ""
 
     form_html = ""
     pos_html = f' <span class="dl-pos">{_e(pos)}</span>' if pos else ""
+    lang_badge = (
+        f' <span class="dl-badge" title="{_e(LANGUAGE_NAMES.get(lang, lang))}">{_e(lang)}</span>'
+        if lang
+        else ""
+    )
 
     ext_ids = query(
         "SELECT resource, value, gloss FROM external_ids WHERE entity_uuid = ?", (uuid,)
     )
-    badge_html = ""
+    # Badges in the fixed priority order LiLa \u2192 WN 3.0 \u2192 WN 3.1 (mirrors the
+    # copy-button row); UUID comes last.
+    by_res = {}
     for eid in ext_ids:
-        res, val, gloss = eid["resource"], eid["value"], eid["gloss"]
-        if res == "lila":
-            if val == "NA":
-                badge_html += (
-                    ' <span class="dl-badge">No equivalent in Lemma Bank</span>'
-                )
-            else:
-                lila_url = urllib.parse.quote(val, safe="")
-                badge_html += (
-                    f' <a href="https://lila-erc.eu/data/id/lemma/{lila_url}" '
-                    f'target="_blank" class="dl-badge" '
-                    f'style="text-decoration:none">\u2197 LiLa {_e(val)}</a>'
-                )
-        elif res == "wordnet31":
-            if val == "NA":
-                badge_html += ' <span class="dl-badge">No WN 3.1 equivalent</span>'
-            else:
-                title = f' title="{_e(gloss)}"' if gloss else ""
-                badge_html += f' <span class="dl-badge"{title}>WN3.1 {_e(val)}</span>'
-        elif res == "wordnet30":
-            if val == "NA":
-                badge_html += ' <span class="dl-badge">No WN 3.0 equivalent</span>'
-            else:
-                title = f' title="{_e(gloss)}"' if gloss else ""
-                badge_html += f' <span class="dl-badge"{title}>WN3.0 {_e(val)}</span>'
+        by_res[eid["resource"]] = (eid["value"], eid["gloss"])
+
+    badge_html = ""
+    if "lila" in by_res:
+        val = by_res["lila"][0]
+        if val == "NA":
+            badge_html += ' <span class="dl-badge">No equivalent in Lemma Bank</span>'
+        else:
+            lila_url = urllib.parse.quote(val, safe="")
+            badge_html += (
+                f' <a href="https://lila-erc.eu/data/id/lemma/{lila_url}" '
+                f'target="_blank" class="dl-badge" '
+                f'style="text-decoration:none">\u2197 LiLa {_e(val)}</a>'
+            )
+    for res, ver in (("wordnet30", "3.0"), ("wordnet31", "3.1")):
+        if res not in by_res:
+            continue
+        val, gloss = by_res[res]
+        if val == "NA":
+            badge_html += f' <span class="dl-badge">No WN {ver} equivalent</span>'
+        else:
+            title = f' title="{_e(gloss)}"' if gloss else ""
+            badge_html += f' <span class="dl-badge"{title}>WN{ver} {_e(val)}</span>'
 
     uuid_badge = f' <span class="dl-badge">{_e(uuid)}</span>'
     header = (
         f'<span class="dl-headword">{_e(headword)}</span>'
-        f"{form_html}{pos_html}{uuid_badge}{badge_html}"
+        f"{form_html}{pos_html}{lang_badge}{badge_html}{uuid_badge}"
     )
 
     variants_html = ""
@@ -603,7 +736,7 @@ def _render_action_card(row):
 
     def_html = ""
     if detail:
-        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {_e(detail)}</div>'
+        def_html = f'<div class="dl-def">{_e(detail)}</div>'
 
     voice_html = ""
     sv = row["semantic_voice"] or ""
@@ -649,8 +782,10 @@ def _render_action_card(row):
                 + "</div>"
             )
 
-    card = f'<div class="dissilex-entry">{header}{variants_html}{def_html}{voice_html}{valency_html}</div>'
+    status_html = _status_html(row)
+    card = f'<div class="dissilex-entry">{header}{variants_html}{def_html}{voice_html}{valency_html}{status_html}</div>'
     st.markdown(card, unsafe_allow_html=True)
+    _render_copy_row(uuid, ext_ids)
 
 
 def _render_concept_card(row):
@@ -659,7 +794,9 @@ def _render_concept_card(row):
     label = row["label"]
     lang = row["language"]
     detail = row["detail"] or ""
-    lang_badge = f' <span class="dl-badge">{_e(lang)}</span>'
+    lang_badge = (
+        f' <span class="dl-badge" title="{_e(LANGUAGE_NAMES.get(lang, lang))}">{_e(lang)}</span>'
+    )
     uuid_badge = f' <span class="dl-badge">{_e(uuid)}</span>'
 
     ext_ids = query(
@@ -675,10 +812,14 @@ def _render_concept_card(row):
         )
         return f' <span class="dl-badge"{title}>{_e(res)} {_e(val)}</span>'
 
-    badge_html = "".join(_ext_badge(e) for e in ext_ids)
+    # Fixed priority order LiLa → WN 3.0 → WN 3.1 (then any other resource);
+    # UUID badge comes last.
+    _res_rank = {"lila": 0, "wordnet30": 1, "wordnet31": 2}
+    ordered = sorted(ext_ids, key=lambda e: _res_rank.get(e["resource"], 3))
+    badge_html = "".join(_ext_badge(e) for e in ordered)
 
     header = (
-        f'<span class="dl-headword">{_e(label)}</span>{lang_badge}{uuid_badge}{badge_html}'
+        f'<span class="dl-headword">{_e(label)}</span>{lang_badge}{badge_html}{uuid_badge}'
     )
 
     variants_html = ""
@@ -688,12 +829,14 @@ def _render_concept_card(row):
 
     def_html = ""
     if detail:
-        def_html = f'<div class="dl-def"><span class="dl-sense-num">\u2460</span> {_e(detail)}</div>'
+        def_html = f'<div class="dl-def">{_e(detail)}</div>'
 
+    status_html = _status_html(row)
     st.markdown(
-        f'<div class="dissilex-entry">{header}{variants_html}{def_html}</div>',
+        f'<div class="dissilex-entry">{header}{variants_html}{def_html}{status_html}</div>',
         unsafe_allow_html=True,
     )
+    _render_copy_row(uuid, ext_ids)
 
 
 def _render_rel_target(uuid_from, target_uuid, label, direction, rtype):
@@ -731,11 +874,14 @@ def _render_relations(uuid):
         grouped = {}
         for r in fwd:
             grouped.setdefault(r["relation_type"], []).append(r)
-        for rtype, rels in grouped.items():
+        for rtype in sorted(grouped, key=_rel_rank):
+            rels = grouped[rtype]
             cols = st.columns([3, 9])
             with cols[0]:
                 st.markdown(
-                    f'<span class="dl-rel-type">{_e(rtype)}</span>', unsafe_allow_html=True
+                    f'<span class="dl-rel-type" title="{_e(RELATION_NAMES.get(rtype, rtype))}">'
+                    f'{_e(rtype)}</span>',
+                    unsafe_allow_html=True,
                 )
             with cols[1]:
                 for r in rels:
@@ -744,15 +890,17 @@ def _render_relations(uuid):
                     )
 
     if rev:
-        with st.expander("Referenced by"):
+        with st.expander("Referenced by", expanded=True):
             grouped = {}
             for r in rev:
                 grouped.setdefault(r["relation_type"], []).append(r)
-            for rtype, rels in grouped.items():
+            for rtype in sorted(grouped, key=_rel_rank):
+                rels = grouped[rtype]
                 cols = st.columns([3, 9])
                 with cols[0]:
                     st.markdown(
-                        f'<span class="dl-rel-type">{_e(rtype)}</span>',
+                        f'<span class="dl-rel-type" title="{_e(RELATION_NAMES.get(rtype, rtype))}">'
+                        f'{_e(rtype)}</span>',
                         unsafe_allow_html=True,
                     )
                 with cols[1]:
@@ -762,16 +910,15 @@ def _render_relations(uuid):
                         )
 
 
-def _render_notes(row):
-    """Render collapsible Notes & sources section."""
+def _status_html(row):
+    """Render the entity status as a small, left-aligned, un-highlighted line at
+    the foot of the card (T70). Shows just the status name (e.g. "Approved",
+    "Pending"), aligned with the headword — not the "Status:" prefix. Language
+    already appears as a badge in the card header, so no language line here."""
     status_label = STATUS_NAMES.get(row["status"], row["status"])
-    lang_label = LANGUAGE_NAMES.get(row["language"], row["language"])
-    with st.expander("Notes & sources"):
-        st.markdown(
-            f'<span class="dl-source">Language: {_e(lang_label)}</span><br>'
-            f'<span class="dl-source">Status: {_e(status_label)}</span>',
-            unsafe_allow_html=True,
-        )
+    if not status_label:
+        return ""
+    return f'<div class="dl-status">{_e(status_label)}</div>'
 
 
 def render_detail(uuid):
@@ -782,14 +929,12 @@ def render_detail(uuid):
     if rows:
         _render_action_card(rows[0])
         _render_relations(uuid)
-        _render_notes(rows[0])
         return
 
     rows = query("SELECT * FROM concepts WHERE uuid = ?", (uuid,))
     if rows:
         _render_concept_card(rows[0])
         _render_relations(uuid)
-        _render_notes(rows[0])
         return
 
     st.error(f"UUID `{uuid}` not found in actions or concepts.")
@@ -821,47 +966,42 @@ elif not nav_term:
     if st.button("\U0001f3b2 Random search", key="random"):
         import random
 
+        # Exclude the 'NA' sentinel (historian-confirmed "no equivalent") so
+        # random search surfaces positive data only. 'NA' stays searchable
+        # individually via the WordNet ID / Auto path.
         pool = query(
-            "SELECT label AS term, 'Lemma' AS stype FROM actions "
+            "SELECT label AS term FROM actions "
             "UNION ALL "
-            "SELECT label AS term, 'Lemma' AS stype FROM concepts "
+            "SELECT label AS term FROM concepts "
             "UNION ALL "
-            "SELECT e.value AS term, 'WordNet ID' AS stype "
-            "FROM external_ids e WHERE e.resource IN ('wordnet30','wordnet31')"
+            "SELECT e.value AS term "
+            "FROM external_ids e WHERE e.resource IN ('wordnet30','wordnet31') "
+            "AND e.value != 'NA'"
         )
         pick = random.choice(pool)
         st.query_params["q"] = pick["term"]
-        st.query_params["t"] = pick["stype"]
+        # Leave the type on "Auto" — auto-detect resolves every pick (lemma or
+        # WordNet ID); NA is excluded above so no ambiguous pick reaches here.
+        st.query_params["t"] = "Auto"
         if "sel" in st.query_params:
             del st.query_params["sel"]
         st.rerun()
     examples = [
         ("dixit", "Lemma", "dixit — action search"),
         ("habuit", "Lemma", "habuit — action search"),
+        ("adoravit", "Lemma", "adoravit — action with active meaning"),
+        ("adoratus/a", "Lemma", "adoratus/a — action with passive meaning"),
+        ("dedit se", "Lemma", "dedit se — action with reflexive meaning"),
         ("confession", "Lemma", "confession — concept search"),
-        ("00014549-v", "WordNet ID", "fecit (WN3.0 00014549-v) — gloss hovertext"),
-        (
-            "00014398-v",
-            "WordNet ID",
-            "requievit (WN3.1 00014398-v) — gloss via CILI mapping to WN3.0",
-        ),
-        ("ieiunavit", "Lemma", "ieiunavit — action with no LiLa Lemma Bank equivalent"),
-        ("abiit", "Lemma", "abiit — action with no WordNet equivalent"),
-        (
-            "0544f316-2cd4-4fbe-80f7-21a9557c8da2",
-            "UUID",
-            "cremavit — action with formerly unidirectional synonym (combussit)",
-        ),
-        (
-            "00fa05e1-16fb-42ca-8c2a-3bb144908b87",
-            "UUID",
-            "prebuit — action with alternative label (praebuit)",
-        ),
     ]
     for term, stype, label in examples:
         if st.button(label, key=f"ex_{term}"):
             st.query_params["q"] = term
-            st.query_params["t"] = stype
+            # Leave the type on "Auto": clicking an example isn't an explicit
+            # type choice, and auto-detect resolves every example correctly
+            # (lemma / WordNet ID / UUID). The `stype` in the tuple documents
+            # the expected resolution only.
+            st.query_params["t"] = "Auto"
             if "sel" in st.query_params:
                 del st.query_params["sel"]
             st.rerun()
