@@ -23,7 +23,7 @@ Two classes of entry are distinguished:
 - **Concepts** consist of single- and multi-word expressions representing other
   parts of speech.
 
-Both Actions and Concepts are situated within a semantic network through 12
+Both Actions and Concepts are situated within a semantic network through 11
 relation types including superclass membership, synonymy, antonymy, and
 action-event equivalence. Every entry is identified by a UUID and corresponds to
 a lemma paired with a distinct meaning.
@@ -58,16 +58,15 @@ annotated sources.
   units are included as first-class entries linked into the semantic network,
   with superclass hierarchies specified directly.
 
-- **Latin meanings absent from the Latin WordNet.** At the time of writing, we
-  have documented 257 unique Princeton WordNet meanings present in DISSILEX that
-  are not registered in the Latin WordNet for any queried lemma, and 362
-  lemma–synset pairs that DISSILEX attests but the Latin WordNet does not record.
+- **Latin meanings absent from the Latin WordNet.** DISSILEX records Princeton
+  WordNet meanings that the Latin WordNet does not register for any queried
+  lemma, as well as lemma–synset pairs it does not attest for the lemma in
+  question.
 
-- **Domain-specific meanings outside Princeton WordNet.** For single-word
-  expressions, DISSILEX contributors identified 181 meanings absent from
-  Princeton WordNet entirely — meanings specific to medieval heresy and
-  inquisition, and cases where existing glosses were judged too distant from a
-  social-scientific perspective.
+- **Domain-specific meanings outside Princeton WordNet.** DISSILEX contributors
+  identified meanings absent from Princeton WordNet entirely — meanings specific
+  to medieval heresy and inquisition, and cases where existing glosses were
+  judged too distant from a social-scientific perspective.
 
 ---
 
