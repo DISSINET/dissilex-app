@@ -5,8 +5,8 @@ for medieval Latin, maintained by the [Dissident Networks Project
 (DISSINET)](https://dissinet.cz) at Masaryk University.
 
 The accompanying dataset (data/dissilex.db) is a SQLite database licensed under 
-CC BY-SA 4.0. It will additionally be published as a citable release on Zenodo 
-in the near future.
+CC BY-SA 4.0. It is additionally published as a citable release on Zenodo 
+at the following address: (https://zenodo.org/records/20600888)[https://zenodo.org/records/20600888].
 
 ---
 

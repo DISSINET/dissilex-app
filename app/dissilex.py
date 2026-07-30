@@ -22,7 +22,7 @@ import streamlit.components.v1 as components
 from lib.constants import Constants
 from lib.scope import symmetric_dedup_sql
 
-from footer import render_footer
+from footer import render_footer, render_sidebar_links
 
 
 def _e(value):
@@ -225,6 +225,8 @@ nav_stype = _qp_get("t") if _qp_get("t") in _SEARCH_TYPES else "Auto"
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
+
+render_sidebar_links()
 
 st.markdown(
     # href="?" returns to the app root on ANY base path: it resolves to the
