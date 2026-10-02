@@ -10,7 +10,7 @@ import streamlit as st
 #: External destinations shown in both the sidebar and the footer.
 EXTERNAL_LINKS = (
     ("GitHub", "https://github.com/DISSINET/dissilex-app"),
-    ("Zenodo", "https://zenodo.org/records/20600888"),
+    ("Zenodo", "https://doi.org/10.5281/zenodo.20600887"),  # concept DOI: latest version
     ("DISSINET", "https://dissinet.cz"),
 )
 

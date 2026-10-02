@@ -2,7 +2,7 @@
 
 DISSILEX integrates and displays lexical data from several external resources. Each is credited below in accordance with its licence.
 
-The DISSILEX dataset (`dissilex.db`) is distributed under CC BY-SA 4.0 (<https://creativecommons.org/licenses/by-sa/4.0/>): a subset of LiLa lemmas is redistributed and its ShareAlike clause applies to the whole dataset.
+The DISSILEX dataset (`dissilex.db`) is distributed under CC BY 4.0 (<https://creativecommons.org/licenses/by/4.0/>), except for third-party content, which keeps its own licence: the LiLa-derived data (lemma forms, spelling variants, POS labels and LiLa IDs) remains under CC BY-SA 4.0, and the Princeton WordNet glosses under the WordNet License.
 
 **Disclaimer:** The material is provided "as is", without warranties of any kind. The creators and contributors of the external resources below do not endorse DISSILEX or its use, and are not responsible for any modifications made within this dataset.
 

@@ -3,15 +3,16 @@
 This NOTICE accompanies the DISSILEX dataset (`data/dissilex.db`) and must be
 retained with **all copies** of that dataset, as required by the licences below.
 
-The DISSILEX dataset is licensed under **CC BY-SA 4.0**
-(<https://creativecommons.org/licenses/by-sa/4.0/>; see `LICENSE-DATA`).
+The DISSILEX dataset is licensed under **CC BY 4.0**
+(<https://creativecommons.org/licenses/by/4.0/>; see `LICENSE-DATA`), except for
+the third-party content listed below, which keeps its own licence.
 The DISSILEX application code is licensed separately under **BSD 3-Clause**
 (see `LICENSE`).
 
 The dataset incorporates and redistributes material from the external resources
 below. Each is used under its own licence; those licences continue to govern the
-respective portions of the data regardless of the CC BY-SA 4.0 licence on the
-dataset as a whole.
+respective portions of the data; the CC BY 4.0 licence covers DISSINET's own
+content only.
 
 ---
 
@@ -20,8 +21,10 @@ dataset as a whole.
 CIRCSE, Università Cattolica del Sacro Cuore (supervised by Marco Carlo
 Passarotti). DISSILEX redistributes a subset of LiLa standard lemma forms and
 part-of-speech labels (identifiers and canonical forms; no further LiLa data) in
-reformatted form. This LiLa-derived portion remains under CC BY-SA 4.0; no lemma
-data was modified beyond format conversion and selection.
+reformatted form. This LiLa-derived portion — columns `lila_canonical`,
+`lila_variants` and `lila_pos` in `actions` and `concepts`, and the `external_ids`
+rows with `resource = 'lila'` — remains under CC BY-SA 4.0; no lemma data was
+modified beyond format conversion and selection.
 
 Mambrini, F. and Passarotti, M.C. (2023). *The LiLa Lemma Bank: A Knowledge Base
 of Latin Canonical Forms.* Journal of Open Humanities Data 9(1).

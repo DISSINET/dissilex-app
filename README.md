@@ -4,9 +4,10 @@
 for medieval Latin, maintained by the [Dissident Networks Project
 (DISSINET)](https://dissinet.cz) at Masaryk University.
 
-The accompanying dataset (data/dissilex.db) is a SQLite database licensed under 
-CC BY-SA 4.0. It is additionally published as a citable release on Zenodo 
-at the following address: (https://zenodo.org/records/20600888)[https://zenodo.org/records/20600888].
+The accompanying dataset (data/dissilex.db) is a SQLite database licensed under
+CC BY 4.0, except for third-party content, which keeps its own licence (see
+below). It is additionally published as a citable release on Zenodo:
+<https://doi.org/10.5281/zenodo.20600887> (this DOI always resolves to the latest version).
 
 ---
 
@@ -85,11 +86,13 @@ Requires `data/dissilex.db`, which is included in the repository.
 
 **Application code** (`app/`, `lib/`): BSD 3-Clause — see `LICENSE`.
 
-**Dataset** (`data/dissilex.db`): CC BY-SA 4.0 — see `LICENSE-DATA` and
-`NOTICE.md`. The dataset incorporates:
+**Dataset** (`data/dissilex.db`): CC BY 4.0 for DISSINET's own content — see
+`LICENSE-DATA` and `NOTICE.md`. Third-party content keeps its own licence;
+the dataset incorporates:
 
-- **LiLa Lemma Bank** (CC BY-SA 4.0) — standard lemma forms and POS labels
-  redistributed in reformatted form. Mambrini & Passarotti (2023),
+- **LiLa Lemma Bank** (CC BY-SA 4.0) — standard lemma forms, spelling variants,
+  POS labels and lemma IDs redistributed in reformatted form; this portion
+  remains under CC BY-SA 4.0. Mambrini & Passarotti (2023),
   <https://doi.org/10.5334/johd.145>. <https://lila-erc.eu/>
 - **Princeton WordNet 3.0 / 3.1** (WordNet License) — synset identifiers and
   glosses. The full WordNet licence notice is reproduced in `NOTICE.md` as
